@@ -302,7 +302,7 @@ static struct Page *best_fit_alloc_pages(size_t n) {
 
 
 
-## 练习2：实现 Best-Fit 连续物理内存分配算法（需要编程）
+## 扩展练习Challenge：buddy system（伙伴系统）分配算法（需要编程）
 
 >  Buddy System算法把系统中的可用存储空间划分为存储块(Block)来进行管理, 每个存储块的大小必须是2的n次幂(Pow(2, n)), 即1, 2, 4, 8, 16, 32, 64, 128…
 >
