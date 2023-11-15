@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.17)
-project(lab3 C)
+project(lab4 C)
 
 set(CMAKE_C_STANDARD 11)
 
@@ -11,12 +11,14 @@ include_directories(kern/fs)
 include_directories(kern/init)
 include_directories(kern/libs)
 include_directories(kern/mm)
+include_directories(kern/process)
+include_directories(kern/schedule)
 include_directories(kern/sync)
 include_directories(kern/trap)
 include_directories(libs)
 include_directories(tools)
 
-add_executable(lab3
+add_executable(lab4
         kern/debug/assert.h
         kern/debug/kdebug.c
         kern/debug/kdebug.h
@@ -32,35 +34,44 @@ add_executable(lab3
         kern/driver/ide.h
         kern/driver/intr.c
         kern/driver/intr.h
+        kern/driver/kbdreg.h
+        kern/driver/picirq.c
+        kern/driver/picirq.h
         kern/fs/fs.h
         kern/fs/swapfs.c
         kern/fs/swapfs.h
         kern/init/init.c
+        kern/libs/readline.c
         kern/libs/stdio.c
         kern/mm/default_pmm.c
         kern/mm/default_pmm.h
+        kern/mm/kmalloc.c
+        kern/mm/kmalloc.h
         kern/mm/memlayout.h
         kern/mm/mmu.h
         kern/mm/pmm.c
         kern/mm/pmm.h
         kern/mm/swap.c
         kern/mm/swap.h
-        kern/mm/swap_clock.c
-        kern/mm/swap_clock.h
         kern/mm/swap_fifo.c
         kern/mm/swap_fifo.h
         kern/mm/vmm.c
         kern/mm/vmm.h
+        kern/process/proc.c
+        kern/process/proc.h
+        kern/schedule/sched.c
+        kern/schedule/sched.h
         kern/sync/sync.h
         kern/trap/trap.c
         kern/trap/trap.h
         libs/atomic.h
         libs/defs.h
+        libs/elf.h
         libs/error.h
+        libs/hash.c
         libs/list.h
         libs/printfmt.c
         libs/rand.c
-        libs/readline.c
         libs/riscv.h
         libs/sbi.h
         libs/stdarg.h
