@@ -7,7 +7,6 @@
 #include <pmm.h>
 #include <riscv.h>
 #include <swap.h>
-#include <kmalloc.h>
 
 /* 
   vmm design include two parts: mm_struct (mm) & vma_struct (vma)
@@ -19,7 +18,7 @@
    golbal functions
      struct mm_struct * mm_create(void)
      void mm_destroy(struct mm_struct *mm)
-     int do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr)
+     int do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr)
 --------------
   vma related functions:
    global functions
@@ -78,7 +77,7 @@ mm_create(void) {
 
 // vma_create - alloc a vma_struct & initialize it. (addr range: vm_start~vm_end)
 struct vma_struct *
-vma_create(uintptr_t vm_start, uintptr_t vm_end, uint32_t vm_flags) {
+vma_create(uintptr_t vm_start, uintptr_t vm_end, uint_t vm_flags) {
     struct vma_struct *vma = kmalloc(sizeof(struct vma_struct));
 
     if (vma != NULL) {
@@ -166,9 +165,9 @@ mm_destroy(struct mm_struct *mm) {
     list_entry_t *list = &(mm->mmap_list), *le;
     while ((le = list_next(list)) != list) {
         list_del(le);
-        kfree(le2vma(le, list_link));  //kfree vma        
+        kfree(le2vma(le, list_link),sizeof(struct vma_struct));  //kfree vma        
     }
-    kfree(mm); //kfree mm
+    kfree(mm, sizeof(struct mm_struct)); //kfree mm
     mm=NULL;
 }
 
@@ -182,14 +181,20 @@ vmm_init(void) {
 // check_vmm - check correctness of vmm
 static void
 check_vmm(void) {
+    size_t nr_free_pages_store = nr_free_pages();
     check_vma_struct();
     check_pgfault();
+
+    nr_free_pages_store--;	// szx : Sv39三级页表多占一个内存页，所以执行此操作
+    assert(nr_free_pages_store == nr_free_pages());
 
     cprintf("check_vmm() succeeded.\n");
 }
 
 static void
 check_vma_struct(void) {
+    size_t nr_free_pages_store = nr_free_pages();
+
     struct mm_struct *mm = mm_create();
     assert(mm != NULL);
 
@@ -243,6 +248,8 @@ check_vma_struct(void) {
 
     mm_destroy(mm);
 
+    assert(nr_free_pages_store == nr_free_pages());
+
     cprintf("check_vma_struct() succeeded!\n");
 }
 
@@ -251,16 +258,18 @@ struct mm_struct *check_mm_struct;
 // check_pgfault - check correctness of pgfault handler
 static void
 check_pgfault(void) {
+	// char *name = "check_pgfault";
     size_t nr_free_pages_store = nr_free_pages();
 
     check_mm_struct = mm_create();
-    assert(check_mm_struct != NULL);
 
+    assert(check_mm_struct != NULL);
     struct mm_struct *mm = check_mm_struct;
     pde_t *pgdir = mm->pgdir = boot_pgdir;
     assert(pgdir[0] == 0);
 
     struct vma_struct *vma = vma_create(0, PTSIZE, VM_WRITE);
+
     assert(vma != NULL);
 
     insert_vma_struct(mm, vma);
@@ -278,16 +287,17 @@ check_pgfault(void) {
     }
     assert(sum == 0);
 
-    pde_t *pd1=pgdir,*pd0=page2kva(pde2page(pgdir[0]));
     page_remove(pgdir, ROUNDDOWN(addr, PGSIZE));
-    free_page(pde2page(pd0[0]));
-    free_page(pde2page(pd1[0]));
+
+    free_page(pde2page(pgdir[0]));
+
     pgdir[0] = 0;
-    flush_tlb();
 
     mm->pgdir = NULL;
     mm_destroy(mm);
+
     check_mm_struct = NULL;
+    nr_free_pages_store--;	// szx : Sv39第二级页表多占了一个内存页，所以执行此操作
 
     assert(nr_free_pages_store == nr_free_pages());
 
@@ -318,7 +328,7 @@ volatile unsigned int pgfault_num=0;
  *            or supervisor mode (0) at the time of the exception.
  */
 int
-do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
+do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
     int ret = -E_INVAL;
     //try to find a vma which include addr
     struct vma_struct *vma = find_vma(mm, addr);
@@ -338,21 +348,36 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
      */
     uint32_t perm = PTE_U;
     if (vma->vm_flags & VM_WRITE) {
-        perm |= READ_WRITE;
+        perm |= (PTE_R | PTE_W);
     }
     addr = ROUNDDOWN(addr, PGSIZE);
 
     ret = -E_NO_MEM;
 
     pte_t *ptep=NULL;
-  
-    // try to find a pte, if pte's PT(Page Table) isn't existed, then create a PT.
-    // (notice the 3th parameter '1')
-    if ((ptep = get_pte(mm->pgdir, addr, 1)) == NULL) {
-        cprintf("get_pte in do_pgfault failed\n");
-        goto failed;
-    }
-    if (*ptep == 0) { // if the phy addr isn't exist, then alloc a page & map the phy addr with logical addr
+    /*
+    * Maybe you want help comment, BELOW comments can help you finish the code
+    *
+    * Some Useful MACROs and DEFINEs, you can use them in below implementation.
+    * MACROs or Functions:
+    *   get_pte : get an pte and return the kernel virtual address of this pte for la
+    *             if the PT contians this pte didn't exist, alloc a page for PT (notice the 3th parameter '1')
+    *   pgdir_alloc_page : call alloc_page & page_insert functions to allocate a page size memory & setup
+    *             an addr map pa<--->la with linear address la and the PDT pgdir
+    * DEFINES:
+    *   VM_WRITE  : If vma->vm_flags & VM_WRITE == 1/0, then the vma is writable/non writable
+    *   PTE_W           0x002                   // page table/directory entry flags bit : Writeable
+    *   PTE_U           0x004                   // page table/directory entry flags bit : User can access
+    * VARIABLES:
+    *   mm->pgdir : the PDT of these vma
+    *
+    */
+
+
+    ptep = get_pte(mm->pgdir, addr, 1);  //(1) try to find a pte, if pte's
+                                         //PT(Page Table) isn't existed, then
+                                         //create a PT.
+    if (*ptep == 0) {
         if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {
             cprintf("pgdir_alloc_page in do_pgfault failed\n");
             goto failed;
@@ -376,11 +401,14 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
             //(1）According to the mm AND addr, try
             //to load the content of right disk page
             //into the memory which page managed.
+            swap_in(mm,addr,&page);
             //(2) According to the mm,
             //addr AND page, setup the
             //map of phy addr <--->
             //logical addr
+            page_insert(mm->pgdir,page,addr,perm);
             //(3) make the page swappable.
+            swap_map_swappable(mm,addr,page,1);
             page->pra_vaddr = addr;
         } else {
             cprintf("no swap_init_ok but ptep is %x, failed\n", *ptep);
@@ -392,4 +420,3 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
 failed:
     return ret;
 }
-
