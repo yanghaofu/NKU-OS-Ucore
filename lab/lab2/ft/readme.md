@@ -1,5 +1,0 @@
-为了运行buddy_system，已经把整个ucore搞得乱七八糟所以每个项目得分开。
-
-这里的slub是在buddy_system文件的基础上改的，因为slub要从buddy里申请page。请务必看看我的slub，它花了我不少心血இ௰இ
-
-然后因为头文件懒癌，所以我的buddy和slub都是塞进default_pmm.c里面了。

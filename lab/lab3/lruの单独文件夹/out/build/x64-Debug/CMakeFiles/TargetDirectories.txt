@@ -1,3 +1,0 @@
-C:/Users/ft183/Desktop/大三上/艹♂做♂系统/riscv64-ucore-labcodes/lab_code/lab3/out/build/x64-Debug/CMakeFiles/rebuild_cache.dir
-C:/Users/ft183/Desktop/大三上/艹♂做♂系统/riscv64-ucore-labcodes/lab_code/lab3/out/build/x64-Debug/CMakeFiles/lab3.dir
-C:/Users/ft183/Desktop/大三上/艹♂做♂系统/riscv64-ucore-labcodes/lab_code/lab3/out/build/x64-Debug/CMakeFiles/edit_cache.dir
