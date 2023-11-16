@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.y": "yacc",
+        "mmu.h": "c"
+    },
+    "C_Cpp.dimInactiveRegions": false
+}
